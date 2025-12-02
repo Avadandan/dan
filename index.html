@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ 2D 變公仔魔法屋 - 實戰版 ✨</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+    <style>
+        /* --- 可愛風配色與排版 --- */
+        body {
+            font-family: 'Varela Round', '微軟正黑體', sans-serif;
+            background-color: #fef6fb;
+            color: #5d5d5d;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { color: #ff8fab; margin-top: 30px; font-size: 2.5rem; text-shadow: 2px 2px white; }
+        .container {
+            width: 90%; max-width: 1000px; background: white; border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(255, 143, 171, 0.2); padding: 30px; margin: 20px 0; text-align: center;
+        }
+        .tabs { display: flex; justify-content: center; margin-bottom: 20px; }
+        .tab-btn {
+            background: #ffe5ec; border: none; padding: 12px 30px; font-size: 1.1rem;
+            cursor: pointer; border-radius: 30px; margin: 0 10px; color: #ff8fab;
+            font-weight: bold; transition: 0.3s;
+        }
+        .tab-btn.active, .tab-btn:hover { background: #ff8fab; color: white; }
+        .input-section { display: none; animation: fadeIn 0.5s; }
+        .input-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .upload-box {
+            border: 3px dashed #ffc2d1; padding: 40px; border-radius: 15px;
+            cursor: pointer; background: #fff0f5; transition: 0.3s;
+        }
+        .upload-box:hover { background: #ffe5ec; border-color: #ff8fab; }
+        input[type="text"] {
+            width: 70%; padding: 15px; border: 2px solid #ffc2d1; border-radius: 10px;
+            font-size: 1rem; outline: none;
+        }
+        .generate-btn {
+            background: linear-gradient(45deg, #ff8fab, #fb6f92); color: white; border: none;
+            padding: 15px 40px; font-size: 1.2rem; border-radius: 50px; margin-top: 20px;
+            cursor: pointer; box-shadow: 0 5px 15px rgba(251, 111, 146, 0.4); transition: transform 0.2s;
+        }
+        .generate-btn:hover { transform: scale(1.05); }
+        .generate-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .viewer-container { margin-top: 40px; border-top: 2px solid #f0f0f0; padding-top: 20px; }
+        model-viewer { width: 100%; height: 400px; background-color: #f7f7f7; border-radius: 15px; }
+        .loader {
+            display: none; margin: 20px auto; border: 5px solid #f3f3f3;
+            border-top: 5px solid #ff8fab; border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <h1>✨ 2D 變公仔魔法屋 ✨</h1>
+
+    <div class="container">
+        <p style="color:red; font-weight:bold;">🚨 這是 API 實戰版：在本地開啟可能因 CORS 限制而失敗。請部署到網站上使用！</p>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('img23d', this)">圖片轉 3D</button>
+            <button class="tab-btn" onclick="switchTab('txt23d', this)">文字轉 3D</button>
+        </div>
+
+        <div id="img23d" class="input-section active">
+            <p>上傳您的 2D 畫作（正面圖效果最好喔！）</p>
+            <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+                <p>📁 點擊這裡上傳圖片</p>
+                <input type="file" id="fileInput" hidden accept="image/*">
+            </div>
+            <img id="previewImg" style="max-width: 200px; margin-top: 10px; border-radius: 10px; display:none;">
+            <br>
+            <button class="generate-btn" onclick="startGeneration('img23d')">開始製作公仔！</button>
+        </div>
+
+        <div id="txt23d" class="input-section">
+            <p>用文字描述您想像中的公仔 (請使用英文，效果最佳)</p>
+            <input type="text" id="textPrompt" placeholder="例如：A cute orange cat wearing a space suit, low-poly style...">
+            <br>
+            <button class="generate-btn" onclick="startGeneration('txt23d')">開始施法！</button>
+        </div>
+
+        <div class="loader" id="loader"></div>
+
+        <div class="viewer-container" id="resultArea" style="display:none;">
+            <h3>🎉 完成了！您的公仔預覽：</h3>
+            <p id="modelMessage">試著用滑鼠拖曳旋轉它！ (目前顯示範例模型)</p>
+            
+            <model-viewer 
+                id="modelViewer"
+                src="https://modelviewer.dev/shared-assets/models/Astronaut.glb" 
+                alt="3D公仔" 
+                auto-rotate 
+                camera-controls 
+                shadow-intensity="1">
+            </model-viewer>
+            
+            <br>
+            <a id="downloadGLB" class="tab-btn" style="background:#4ecdc4; color:white; display:none;" download="my_kawaii_model.glb">⬇️ 下載 .GLB 檔</a>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================================
+        //         !!! 第 1 步：替換您的金鑰在這裡 !!!
+        // ==========================================================
+        const MESHY_API_KEY = 'YOUR_MESHY_API_KEY_HERE'; 
+        // ==========================================================
+        
+        const TEXT_TO_3D_URL = 'https://api.meshy.ai/v1/text-to-3d'; 
+
+        // 輔助函式：切換分頁
+        function switchTab(tabId, button) {
+            document.querySelectorAll('.input-section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            button.classList.add('active');
+        }
+
+        // 輔助函式：預覽上傳圖片
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById('previewImg');
+                    img.src = e.target.result;
+                    img.style.display = 'inline-block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 主要函式：開始生成 3D 模型
+        async function startGeneration(mode) {
+            const generateBtn = document.querySelector(`#${mode} .generate-btn`);
+
+            if (MESHY_API_KEY === 'msy_m3ZXssCi82PYJciIN4RTXbR6IKUiGciNfjNR') {
+                alert("🚨 錯誤：請先將程式碼中的 'YOUR_MESHY_API_KEY_HERE' 替換成您真正的 Meshy API 金鑰！");
+                return;
+            }
+
+            // 1. 準備輸入資料
+            let prompt = '';
+            if (mode === 'txt23d') {
+                prompt = document.getElementById('textPrompt').value.trim();
+                if (!prompt) {
+                    alert("請輸入文字描述！");
+                    return;
+                }
+            } else if (mode === 'img23d') {
+                // 圖片轉 3D 的 API 流程更複雜，這裡我們只處理 Text-to-3D
+                // 我們強制給一個可愛的提示來處理圖片模式，但 API 仍會走 Text-to-3D 流程。
+                // 實戰中需要先上傳圖片到 Meshy，並取得 URL，這是複雜的後端工作。
+                prompt = document.getElementById('textPrompt').value.trim() || "A cute cartoon character from a 2D drawing, turned into a beautiful 3D figurine, kawaii style, vibrant colors.";
+            }
+
+            // 2. 更新介面為讀取狀態
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('resultArea').style.display = 'none';
+            document.getElementById('downloadGLB').style.display = 'none';
+            generateBtn.disabled = true;
+            generateBtn.innerText = "AI 正在努力建模中... (請稍候)";
+
+            // 3. 發送 API 請求開始生成
+            try {
+                const response = await fetch(TEXT_TO_3D_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${MESHY_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        art_style: 'kawaii', // 強調可愛風格
+                        output_format: 'glb',
+                        mode: 'precise' // 高品質模式
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.status !== 200 || data.code !== 0) {
+                    console.error("Meshy API 錯誤:", data);
+                    throw new Error(`API 呼叫失敗！錯誤訊息：${data.message || '未知錯誤'}`);
+                }
+
+                const taskID = data.result.task_id;
+                console.log("任務開始，ID:", taskID);
+
+                // 4. 輪詢檢查生成狀態
+                const modelURL = await pollTaskStatus(taskID, generateBtn);
+
+                // 5. 顯示結果
+                if (modelURL) {
+                    updateModelViewer(modelURL);
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('resultArea').style.display = 'block';
+                    document.getElementById('modelMessage').innerText = `您的模型已生成！`;
+                    document.getElementById('downloadGLB').href = modelURL;
+                    document.getElementById('downloadGLB').style.display = 'inline-block';
+                } else {
+                    alert("模型生成失敗或超時，請重試。");
+                }
+                
+                generateBtn.disabled = false;
+                generateBtn.innerText = "再次生成";
+
+            } catch (error) {
+                console.error('生成過程發生錯誤:', error);
+                alert(`錯誤發生：${error.message}\n\n🚨 請注意：如果是 CORS 錯誤，表示您的網頁沒有部署到公開網站！`);
+                document.getElementById('loader').style.display = 'none';
+                generateBtn.disabled = false;
+                generateBtn.innerText = "再次生成";
+            }
+        }
+
+        // 輔助函式：輪詢檢查任務狀態
+        async function pollTaskStatus(taskID, generateBtn) {
+            const STATUS_URL = `https://api.meshy.ai/v1/tasks/${taskID}`;
+            let status = 'PENDING';
+            let attempt = 0;
+            const maxAttempts = 30; // 最多檢查 30 次，每次間隔 10 秒 = 300 秒 (5分鐘)
+
+            while (status === 'PENDING' || status === 'IN_PROGRESS' || status === 'QUEUED') {
+                if (attempt >= maxAttempts) {
+                    return null; // 超時
+                }
+
+                // 等待 10 秒
+                await new Promise(resolve => setTimeout(resolve, 10000)); 
+                attempt++;
+                generateBtn.innerText = `AI 建模中... 狀態檢查: ${attempt} 次 (約 ${attempt * 10} 秒)`;
+
+                try {
+                    const response = await fetch(STATUS_URL, {
+                        method: 'GET',
+                        headers: { 'Authorization': `Bearer ${MESHY_API_KEY}` }
+                    });
+
+                    const data = await response.json();
+                    status = data.result.status;
+
+                    if (status === 'SUCCEEDED') {
+                        return data.result.model_url; 
+                    } else if (status === 'FAILED') {
+                        console.error("生成任務失敗:", data.result.error_message);
+                        alert(`生成失敗: ${data.result.error_message}`);
+                        return null;
+                    }
+
+                } catch (error) {
+                    console.error('輪詢狀態時發生錯誤:', error);
+                    return null;
+                }
+            }
+            return null; // 狀態異常
+        }
+
+        // 輔助函式：更新 3D 檢視器
+        function updateModelViewer(url) {
+            const viewer = document.getElementById('modelViewer');
+            viewer.setAttribute('src', url);
+        }
+    </script>
+
+</body>
+</html>
